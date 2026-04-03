@@ -12,10 +12,10 @@ use project::DisableAiSettings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{
-    DockPosition, DockSide, LanguageModelParameters, LanguageModelSelection, NewThreadLocation,
-    NotifyWhenAgentWaiting, PlaySoundWhenAgentDone, RegisterSetting, Settings, SettingsContent,
-    SettingsStore, SidebarDockPosition, SidebarSide, ThinkingBlockDisplay, ToolPermissionMode,
-    update_settings_file,
+    ContextWindowDisplay, DockPosition, DockSide, LanguageModelParameters,
+    LanguageModelSelection, NewThreadLocation, NotifyWhenAgentWaiting, PlaySoundWhenAgentDone,
+    RegisterSetting, Settings, SettingsContent, SettingsStore, SidebarDockPosition, SidebarSide,
+    ThinkingBlockDisplay, ToolPermissionMode, update_settings_file,
 };
 
 pub use crate::agent_profile::*;
@@ -177,6 +177,7 @@ pub struct AgentSettings {
     pub message_editor_min_lines: usize,
     pub show_turn_stats: bool,
     pub auto_focus_on_selection: bool,
+    pub context_window_display: ContextWindowDisplay,
     pub tool_permissions: ToolPermissions,
     pub new_thread_location: NewThreadLocation,
 }
@@ -631,6 +632,7 @@ impl Settings for AgentSettings {
             message_editor_min_lines: agent.message_editor_min_lines.unwrap(),
             show_turn_stats: agent.show_turn_stats.unwrap(),
             auto_focus_on_selection: agent.auto_focus_on_selection.unwrap(),
+            context_window_display: agent.context_window_display.unwrap_or_default(),
             tool_permissions: compile_tool_permissions(agent.tool_permissions),
             new_thread_location: agent.new_thread_location.unwrap_or_default(),
         }

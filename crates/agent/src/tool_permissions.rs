@@ -563,7 +563,9 @@ mod tests {
     use crate::tools::{DeletePathTool, EditFileTool, FetchTool, TerminalTool};
     use agent_settings::{AgentProfileId, CompiledRegex, InvalidRegexPattern, ToolRules};
     use gpui::px;
-    use settings::{DockPosition, NotifyWhenAgentWaiting, PlaySoundWhenAgentDone};
+    use settings::{
+        ContextWindowDisplay, DockPosition, NotifyWhenAgentWaiting, PlaySoundWhenAgentDone,
+    };
     use std::sync::Arc;
 
     fn test_agent_settings(tool_permissions: ToolPermissions) -> AgentSettings {
@@ -596,6 +598,7 @@ mod tests {
             tool_permissions,
             show_turn_stats: false,
             auto_focus_on_selection: true,
+            context_window_display: ContextWindowDisplay::default(),
             new_thread_location: Default::default(),
             sidebar_side: Default::default(),
             thinking_display: Default::default(),

@@ -13,7 +13,7 @@ use crate::message_editor::SharedSessionCapabilities;
 use gpui::{Corner, List};
 use heapless::Vec as ArrayVec;
 use language_model::{LanguageModelEffortLevel, Speed};
-use settings::update_settings_file;
+use settings::{ContextWindowDisplay, update_settings_file};
 use ui::{ButtonLike, SplitButton, SplitButtonStyle, Tab};
 use workspace::SERIALIZATION_THROTTLE_TIME;
 
@@ -3198,7 +3198,6 @@ impl ThreadView {
                             .children(self.render_token_usage(cx))
                             .children(self.profile_selector.clone())
                             .map(|this| {
-                                // Either config_options_view OR (mode_selector + model_selector)
                                 match self.config_options_view.clone() {
                                     Some(config_view) => this.child(config_view),
                                     None => this
@@ -3463,6 +3462,10 @@ impl ThreadView {
             crate::humanize_token_count(usage.max_tokens.saturating_sub(max_output_tokens));
         let output_max_label = crate::humanize_token_count(max_output_tokens);
 
+        let detail_percentage = percentage.clone();
+        let detail_used = used.clone();
+        let detail_max = max.clone();
+
         let build_tooltip = {
             move |_window: &mut Window, cx: &mut App| {
                 let percentage = percentage.clone();
@@ -3557,21 +3560,74 @@ impl ThreadView {
                     .into_any_element(),
             )
         } else {
+            let display_mode = AgentSettings::get_global(cx).context_window_display;
+            let separator_color = Color::Custom(cx.theme().colors().text_disabled.opacity(0.6));
+
+            let fs = self.project.upgrade().map(|p| p.read(cx).fs().clone());
+
             Some(
                 h_flex()
                     .id("circular_progress_tokens")
                     .mt_px()
                     .mr_1()
-                    .child(
-                        CircularProgress::new(
-                            usage.used_tokens as f32,
-                            usage.max_tokens as f32,
-                            ring_size,
-                            cx,
+                    .gap_1()
+                    .cursor_pointer()
+                    .on_click(move |_event, _window, cx| {
+                        let Some(fs) = fs.clone() else { return };
+                        let next = match display_mode {
+                            ContextWindowDisplay::Compact => ContextWindowDisplay::Detailed,
+                            ContextWindowDisplay::Detailed => ContextWindowDisplay::Compact,
+                        };
+                        update_settings_file(fs, cx, move |settings, _| {
+                            settings
+                                .agent
+                                .get_or_insert_default()
+                                .set_context_window_display(next);
+                        });
+                    })
+                    .when(display_mode == ContextWindowDisplay::Compact, |this| {
+                        this.child(
+                            CircularProgress::new(
+                                usage.used_tokens as f32,
+                                usage.max_tokens as f32,
+                                ring_size,
+                                cx,
+                            )
+                            .stroke_width(stroke_width)
+                            .progress_color(progress_color(progress_ratio)),
                         )
-                        .stroke_width(stroke_width)
-                        .progress_color(progress_color(progress_ratio)),
-                    )
+                    })
+                    .when(display_mode == ContextWindowDisplay::Detailed, |this| {
+                        this.child(
+                            h_flex()
+                                .gap_0p5()
+                                .child(
+                                    Label::new(detail_percentage.clone())
+                                        .size(LabelSize::Small)
+                                        .color(Color::Muted),
+                                )
+                                .child(
+                                    Label::new("·")
+                                        .size(LabelSize::Small)
+                                        .color(separator_color),
+                                )
+                                .child(
+                                    Label::new(detail_used.clone())
+                                        .size(LabelSize::Small)
+                                        .color(Color::Muted),
+                                )
+                                .child(
+                                    Label::new("/")
+                                        .size(LabelSize::Small)
+                                        .color(separator_color),
+                                )
+                                .child(
+                                    Label::new(detail_max.clone())
+                                        .size(LabelSize::Small)
+                                        .color(Color::Muted),
+                                ),
+                        )
+                    })
                     .hoverable_tooltip(build_tooltip)
                     .into_any_element(),
             )
