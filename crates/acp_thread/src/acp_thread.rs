@@ -1428,6 +1428,23 @@ impl AcpThread {
                 config_options,
                 ..
             }) => cx.emit(AcpThreadEvent::ConfigOptionsUpdated(config_options)),
+            acp::SessionUpdate::UsageUpdate(usage) => {
+                let max_tokens = self
+                    .token_usage
+                    .as_ref()
+                    .map(|existing| existing.max_tokens.max(usage.size))
+                    .unwrap_or(usage.size);
+                self.update_token_usage(
+                    Some(TokenUsage {
+                        max_tokens,
+                        used_tokens: usage.used,
+                        input_tokens: 0,
+                        output_tokens: 0,
+                        max_output_tokens: None,
+                    }),
+                    cx,
+                );
+            }
             _ => {}
         }
         Ok(())
