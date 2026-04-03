@@ -189,6 +189,26 @@ actions!(
         ScrollOutputToPreviousMessage,
         /// Scroll the output to the next user message.
         ScrollOutputToNextMessage,
+        /// Close the current agent tab.
+        CloseTab,
+        /// Switch to agent tab 1.
+        ActivateTab1,
+        /// Switch to agent tab 2.
+        ActivateTab2,
+        /// Switch to agent tab 3.
+        ActivateTab3,
+        /// Switch to agent tab 4.
+        ActivateTab4,
+        /// Switch to agent tab 5.
+        ActivateTab5,
+        /// Switch to agent tab 6.
+        ActivateTab6,
+        /// Switch to agent tab 7.
+        ActivateTab7,
+        /// Switch to agent tab 8.
+        ActivateTab8,
+        /// Switch to agent tab 9.
+        ActivateTab9,
     ]
 );
 

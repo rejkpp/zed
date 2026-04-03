@@ -27,10 +27,12 @@ use zed_actions::agent::{
 
 use crate::thread_metadata_store::ThreadMetadataStore;
 use crate::{
-    AddContextServer, AgentDiffPane, ConversationView, CopyThreadToClipboard, CycleStartThreadIn,
-    Follow, InlineAssistant, LoadThreadFromClipboard, NewThread, OpenActiveThreadAsMarkdown,
-    OpenAgentDiff, OpenHistory, ResetTrialEndUpsell, ResetTrialUpsell, StartThreadIn,
-    ToggleNavigationMenu, ToggleNewThreadMenu, ToggleOptionsMenu,
+    ActivateTab1, ActivateTab2, ActivateTab3, ActivateTab4, ActivateTab5, ActivateTab6,
+    ActivateTab7, ActivateTab8, ActivateTab9, AddContextServer, AgentDiffPane, CloseTab,
+    ConversationView, CopyThreadToClipboard, CycleStartThreadIn, Follow, InlineAssistant,
+    LoadThreadFromClipboard, NewThread, OpenActiveThreadAsMarkdown, OpenAgentDiff, OpenHistory,
+    ResetTrialEndUpsell, ResetTrialUpsell, StartThreadIn, ToggleNavigationMenu,
+    ToggleNewThreadMenu, ToggleOptionsMenu,
     agent_configuration::{AgentConfiguration, AssistantConfigurationEvent},
     conversation_view::{AcpThreadViewEvent, ThreadView},
     ui::EndTrialUpsell,
@@ -600,6 +602,8 @@ fn build_conflicted_files_resolution_prompt(
     content
 }
 
+const MAX_AGENT_TABS: usize = 9;
+
 enum ActiveView {
     Uninitialized,
     AgentThread {
@@ -609,6 +613,10 @@ enum ActiveView {
         view: Entity<ThreadHistoryView>,
     },
     Configuration,
+}
+
+struct AgentTab {
+    conversation_view: Entity<ConversationView>,
 }
 
 enum WhichFontSize {
@@ -660,6 +668,8 @@ pub struct AgentPanel {
     focus_handle: FocusHandle,
     active_view: ActiveView,
     previous_view: Option<ActiveView>,
+    tabs: Vec<AgentTab>,
+    active_tab_index: usize,
     background_threads: HashMap<acp::SessionId, Entity<ConversationView>>,
     new_thread_menu_handle: PopoverMenuHandle<ContextMenu>,
     start_thread_in_menu_handle: PopoverMenuHandle<ContextMenu>,
@@ -976,6 +986,8 @@ impl AgentPanel {
             focus_handle: cx.focus_handle(),
             context_server_registry,
             previous_view: None,
+            tabs: Vec::new(),
+            active_tab_index: 0,
             background_threads: HashMap::default(),
             new_thread_menu_handle: PopoverMenuHandle::default(),
             start_thread_in_menu_handle: PopoverMenuHandle::default(),
@@ -1737,6 +1749,149 @@ impl AgentPanel {
         self.cleanup_background_threads(cx);
     }
 
+    fn is_view_in_tabs(&self, view: &ActiveView) -> bool {
+        if let ActiveView::AgentThread { conversation_view } = view {
+            let entity_id = conversation_view.entity_id();
+            self.tabs
+                .iter()
+                .any(|tab| tab.conversation_view.entity_id() == entity_id)
+        } else {
+            false
+        }
+    }
+
+    fn evict_tab_for_new(&mut self, cx: &mut Context<Self>) {
+        // Prefer to evict the oldest idle tab that is not the active tab
+        let evict_index = self
+            .tabs
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != self.active_tab_index)
+            .find(|(_, tab)| {
+                tab.conversation_view
+                    .read(cx)
+                    .root_thread(cx)
+                    .map_or(true, |tv| tv.read(cx).thread.read(cx).status() == ThreadStatus::Idle)
+            })
+            .map(|(i, _)| i)
+            .unwrap_or_else(|| {
+                // If all tabs are busy, evict the first non-active tab
+                if self.active_tab_index == 0 { 1 } else { 0 }
+            });
+        let removed = self.tabs.remove(evict_index);
+        self.retain_running_thread(
+            ActiveView::AgentThread {
+                conversation_view: removed.conversation_view,
+            },
+            cx,
+        );
+        if self.active_tab_index > evict_index {
+            self.active_tab_index -= 1;
+        }
+    }
+
+    fn switch_to_tab(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if index >= self.tabs.len() {
+            return;
+        }
+        self.active_tab_index = index;
+        let conversation_view = self.tabs[index].conversation_view.clone();
+
+        // If we're in an overlay, dismiss it
+        if matches!(
+            self.active_view,
+            ActiveView::History { .. } | ActiveView::Configuration
+        ) {
+            self.previous_view = None;
+        }
+
+        self.active_view = ActiveView::AgentThread { conversation_view };
+
+        // Re-subscribe to the new active tab
+        self.update_active_view_subscriptions(window, cx);
+
+        self.focus_handle(cx).focus(window, cx);
+        cx.emit(AgentPanelEvent::ActiveViewChanged);
+        self.serialize(cx);
+        cx.notify();
+    }
+
+    fn close_tab(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if index >= self.tabs.len() {
+            return;
+        }
+
+        let removed = self.tabs.remove(index);
+
+        // Move to background if it has messages
+        self.retain_running_thread(
+            ActiveView::AgentThread {
+                conversation_view: removed.conversation_view,
+            },
+            cx,
+        );
+
+        if self.tabs.is_empty() {
+            // Create a new empty thread
+            self.new_thread(&NewThread, window, cx);
+            return;
+        }
+
+        // Adjust active tab index
+        if self.active_tab_index >= self.tabs.len() {
+            self.active_tab_index = self.tabs.len() - 1;
+        } else if self.active_tab_index > index {
+            self.active_tab_index -= 1;
+        }
+
+        self.switch_to_tab(self.active_tab_index, window, cx);
+    }
+
+    fn update_active_view_subscriptions(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self._active_view_observation = match &self.active_view {
+            ActiveView::AgentThread { conversation_view } => {
+                self._thread_view_subscription =
+                    Self::subscribe_to_active_thread_view(conversation_view, window, cx);
+                let focus_handle = conversation_view.focus_handle(cx);
+                self._active_thread_focus_subscription =
+                    Some(cx.on_focus_in(&focus_handle, window, |_this, _window, cx| {
+                        cx.emit(AgentPanelEvent::ThreadFocused);
+                        cx.notify();
+                    }));
+                Some(cx.observe_in(
+                    conversation_view,
+                    window,
+                    |this, server_view, window, cx| {
+                        this._thread_view_subscription =
+                            Self::subscribe_to_active_thread_view(&server_view, window, cx);
+                        cx.emit(AgentPanelEvent::ActiveViewChanged);
+                        this.serialize(cx);
+                        cx.notify();
+                    },
+                ))
+            }
+            _ => {
+                self._thread_view_subscription = None;
+                self._active_thread_focus_subscription = None;
+                None
+            }
+        };
+    }
+
+    fn tab_title(&self, index: usize, cx: &App) -> SharedString {
+        self.tabs
+            .get(index)
+            .and_then(|tab| {
+                let thread_view = tab.conversation_view.read(cx).active_thread()?;
+                thread_view.read(cx).thread.read(cx).title()
+            })
+            .unwrap_or_else(|| format!("Thread {}", index + 1).into())
+    }
+
     /// We keep threads that are:
     /// - Still running
     /// - Do not support reloading the full session
@@ -1797,6 +1952,28 @@ impl AgentPanel {
         let current_is_overlay = current_is_history || current_is_config;
         let new_is_overlay = new_is_history || new_is_config;
 
+        // When setting a new AgentThread, add it to the tab list
+        if let ActiveView::AgentThread { conversation_view } = &new_view {
+            let entity_id = conversation_view.entity_id();
+            let already_in_tabs = self
+                .tabs
+                .iter()
+                .position(|tab| tab.conversation_view.entity_id() == entity_id);
+
+            if let Some(index) = already_in_tabs {
+                self.active_tab_index = index;
+            } else {
+                // If at max tabs, close the oldest idle tab
+                if self.tabs.len() >= MAX_AGENT_TABS {
+                    self.evict_tab_for_new(cx);
+                }
+                self.tabs.push(AgentTab {
+                    conversation_view: conversation_view.clone(),
+                });
+                self.active_tab_index = self.tabs.len() - 1;
+            }
+        }
+
         if current_is_uninitialized || (current_is_overlay && !new_is_overlay) {
             self.active_view = new_view;
         } else if !current_is_overlay && new_is_overlay {
@@ -1805,44 +1982,19 @@ impl AgentPanel {
             let old_view = std::mem::replace(&mut self.active_view, new_view);
             if !new_is_overlay {
                 if let Some(previous) = self.previous_view.take() {
-                    self.retain_running_thread(previous, cx);
+                    // Only retain if not in tabs
+                    if !self.is_view_in_tabs(&previous) {
+                        self.retain_running_thread(previous, cx);
+                    }
                 }
             }
-            self.retain_running_thread(old_view, cx);
+            // Only retain old view if it's not in tabs
+            if !self.is_view_in_tabs(&old_view) {
+                self.retain_running_thread(old_view, cx);
+            }
         }
 
-        // Subscribe to the active ThreadView's events (e.g. FirstSendRequested)
-        // so the panel can intercept the first send for worktree creation.
-        // Re-subscribe whenever the ConnectionView changes, since the inner
-        // ThreadView may have been replaced (e.g. navigating between threads).
-        self._active_view_observation = match &self.active_view {
-            ActiveView::AgentThread { conversation_view } => {
-                self._thread_view_subscription =
-                    Self::subscribe_to_active_thread_view(conversation_view, window, cx);
-                let focus_handle = conversation_view.focus_handle(cx);
-                self._active_thread_focus_subscription =
-                    Some(cx.on_focus_in(&focus_handle, window, |_this, _window, cx| {
-                        cx.emit(AgentPanelEvent::ThreadFocused);
-                        cx.notify();
-                    }));
-                Some(cx.observe_in(
-                    conversation_view,
-                    window,
-                    |this, server_view, window, cx| {
-                        this._thread_view_subscription =
-                            Self::subscribe_to_active_thread_view(&server_view, window, cx);
-                        cx.emit(AgentPanelEvent::ActiveViewChanged);
-                        this.serialize(cx);
-                        cx.notify();
-                    },
-                ))
-            }
-            _ => {
-                self._thread_view_subscription = None;
-                self._active_thread_focus_subscription = None;
-                None
-            }
-        };
+        self.update_active_view_subscriptions(window, cx);
 
         if let ActiveView::History { view } = &self.active_view {
             if !was_in_agent_history {
@@ -2083,6 +2235,18 @@ impl AgentPanel {
                 window,
                 cx,
             );
+            return;
+        }
+
+        // Check if this session is already open in a tab
+        if let Some(tab_index) = self.tabs.iter().position(|tab| {
+            tab.conversation_view
+                .read(cx)
+                .active_thread()
+                .map(|t| t.read(cx).id.clone())
+                == Some(session_id.clone())
+        }) {
+            self.switch_to_tab(tab_index, window, cx);
             return;
         }
 
@@ -3284,6 +3448,72 @@ impl AgentPanel {
             })
     }
 
+    fn render_tab_bar(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        if self.tabs.len() <= 1 {
+            return None;
+        }
+
+        let active_index = self.active_tab_index;
+
+        Some(
+            h_flex()
+                .w_full()
+                .gap_px()
+                .px_1()
+                .py_0p5()
+                .border_b_1()
+                .border_color(cx.theme().colors().border)
+                .bg(cx.theme().colors().tab_bar_background)
+                .children(self.tabs.iter().enumerate().map(|(index, _tab)| {
+                    let is_active = index == active_index;
+                    let title = self.tab_title(index, cx);
+                    let tab_label = format!("{}. {}", index + 1, title);
+
+                    h_flex()
+                        .id(("agent-tab", index))
+                        .px_2()
+                        .py_0p5()
+                        .gap_1()
+                        .rounded_md()
+                        .cursor_pointer()
+                        .text_size(px(12.0))
+                        .when(is_active, |this| {
+                            this.bg(cx.theme().colors().tab_active_background)
+                        })
+                        .when(!is_active, |this| {
+                            this.hover(|style| {
+                                style.bg(cx.theme().colors().ghost_element_hover)
+                            })
+                        })
+                        .child(
+                            Label::new(tab_label)
+                                .size(LabelSize::Small)
+                                .color(if is_active {
+                                    Color::Default
+                                } else {
+                                    Color::Muted
+                                }),
+                        )
+                        .child(
+                            div()
+                                .id(("agent-tab-close", index))
+                                .cursor_pointer()
+                                .child(
+                                    Icon::new(IconName::Close)
+                                        .size(IconSize::XSmall)
+                                        .color(Color::Muted),
+                                )
+                                .on_click(cx.listener(move |this, _event, window, cx| {
+                                    this.close_tab(index, window, cx);
+                                })),
+                        )
+                        .on_click(cx.listener(move |this, _event, window, cx| {
+                            this.switch_to_tab(index, window, cx);
+                        }))
+                })),
+        )
+    }
+
     fn render_toolbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let agent_server_store = self.project.read(cx).agent_server_store().clone();
         let has_visible_worktrees = self.project.read(cx).visible_worktrees(cx).next().is_some();
@@ -4005,6 +4235,36 @@ impl Render for AgentPanel {
             .on_action(cx.listener(|this, action: &NewThread, window, cx| {
                 this.new_thread(action, window, cx);
             }))
+            .on_action(cx.listener(|this, _: &CloseTab, window, cx| {
+                this.close_tab(this.active_tab_index, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab1, window, cx| {
+                this.switch_to_tab(0, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab2, window, cx| {
+                this.switch_to_tab(1, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab3, window, cx| {
+                this.switch_to_tab(2, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab4, window, cx| {
+                this.switch_to_tab(3, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab5, window, cx| {
+                this.switch_to_tab(4, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab6, window, cx| {
+                this.switch_to_tab(5, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab7, window, cx| {
+                this.switch_to_tab(6, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab8, window, cx| {
+                this.switch_to_tab(7, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ActivateTab9, window, cx| {
+                this.switch_to_tab(8, window, cx);
+            }))
             .on_action(cx.listener(|this, _: &OpenHistory, window, cx| {
                 this.open_history(window, cx);
             }))
@@ -4028,6 +4288,7 @@ impl Render for AgentPanel {
                 }
             }))
             .child(self.render_toolbar(window, cx))
+            .children(self.render_tab_bar(cx))
             .children(self.render_workspace_trust_message(cx))
             .children(self.render_onboarding(window, cx))
             .map(|parent| match &self.active_view {
