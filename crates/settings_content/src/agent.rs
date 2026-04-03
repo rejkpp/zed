@@ -270,6 +270,8 @@ impl AgentSettingsContent {
 
     pub fn set_auto_focus_on_selection(&mut self, value: bool) {
         self.auto_focus_on_selection = Some(value);
+    }
+
     pub fn set_context_window_display(&mut self, display: ContextWindowDisplay) {
         self.context_window_display = Some(display);
     }

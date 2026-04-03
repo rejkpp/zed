@@ -27,16 +27,12 @@ use zed_actions::agent::{
 
 use crate::thread_metadata_store::ThreadMetadataStore;
 use crate::{
-    AddContextServer, AgentDiffPane, ConversationView, CopyThreadToClipboard, CycleStartThreadIn,
-    Follow, InlineAssistant, LoadThreadFromClipboard, NewThread, OpenActiveThreadAsMarkdown,
-    OpenAgentDiff, OpenHistory, ResetTrialEndUpsell, ResetTrialUpsell, StartThreadIn,
-    ToggleAutoFocusOnSelection, ToggleNavigationMenu, ToggleNewThreadMenu, ToggleOptionsMenu,
     ActivateTab1, ActivateTab2, ActivateTab3, ActivateTab4, ActivateTab5, ActivateTab6,
     ActivateTab7, ActivateTab8, ActivateTab9, AddContextServer, AgentDiffPane, CloseTab,
     ConversationView, CopyThreadToClipboard, CycleStartThreadIn, Follow, InlineAssistant,
     LoadThreadFromClipboard, NewThread, OpenActiveThreadAsMarkdown, OpenAgentDiff, OpenHistory,
-    ResetTrialEndUpsell, ResetTrialUpsell, StartThreadIn, ToggleNavigationMenu,
-    ToggleNewThreadMenu, ToggleOptionsMenu,
+    ResetTrialEndUpsell, ResetTrialUpsell, StartThreadIn, ToggleAutoFocusOnSelection,
+    ToggleNavigationMenu, ToggleNewThreadMenu, ToggleOptionsMenu,
     agent_configuration::{AgentConfiguration, AssistantConfigurationEvent},
     conversation_view::{AcpThreadViewEvent, ThreadView},
     ui::EndTrialUpsell,
@@ -4247,6 +4243,7 @@ impl Render for AgentPanel {
                         .get_or_insert_default()
                         .set_auto_focus_on_selection(!current);
                 });
+            }))
             .on_action(cx.listener(|this, _: &CloseTab, window, cx| {
                 this.close_tab(this.active_tab_index, window, cx);
             }))
