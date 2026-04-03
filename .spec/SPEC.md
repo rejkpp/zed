@@ -1,64 +1,40 @@
-# Project Spec
+# Branch: custom
 
-| Field | Value |
-| --- | --- |
-| Project | Zed (custom fork) |
-| Created | 2026-03-09 |
-| Last Updated | 2026-04-03 |
-| Stage | Live |
-
-## Goals
-
-Custom fork of the Zed editor with personal enhancements to the Agent Thread UI, rebased on top of upstream.
+Integration branch that merges all feature branches onto `main`.
 
 ## Current Phase
 
-Active — all custom features rebased onto latest upstream (synced 2026-04-02, 372 commits absorbed). Building and testing with `zed-dev`.
+Stable. All features implemented, compiled, pushed to origin.
 
-## Branch Strategy
+## Features
 
-Simplified rebase workflow (changed from merge-based 2026-03-21):
+### 1. Transient Auto-Selection (`feat/transient-auto-selection`)
+- Chip in message editor showing current code selection as transient context
+- Auto-focus: when agent panel is open, selecting code auto-inserts context
+- `auto_focus_on_selection` setting (default: true)
+- `ctrl+cmd+a` toggle action (`ToggleAutoFocusOnSelection`)
 
-- **`main`** — Clean mirror of `upstream/main`. Never commit own work here.
-- **`custom`** — All custom features as linear commits on top of `main`. Always build from this.
+### 2. Token Usage Display (`feat/token-usage-display`)
+- Wires `ACP UsageUpdate` into `TokenUsage` struct
+- Preserves larger context window (`max_tokens.max(usage.size)`) to avoid 200k overwrite on 1M models
+- Compact mode: circular progress ring
+- Detailed mode: percentage + used/max labels
+- Click to toggle between modes
+- `context_window_display` setting (Compact/Detailed)
 
-No more `feat/*` branches — all custom work lives as commits directly on `custom`.
+### 3. Multi-Tab Agent Panel (`feat/multi-tab-panel`)
+- Tab bar in agent panel (max 9 tabs)
+- `cmd+1` through `cmd+9` to switch tabs
+- `ctrl+w` to close current tab
+- Idle tab eviction when max reached
+- Background threads retained when tabs close
 
-### Upstream Sync
+## Tasks
 
-```bash
-git fetch upstream
-git checkout main && git pull upstream main
-git checkout custom && git rebase main
-git push --force-with-lease origin custom
-```
+| # | Task | Status | Agent |
+|---|---|---|---|
+| — | All features implemented | Done | — |
 
-When rebasing, resolve conflicts per commit. Check if upstream implemented similar features — drop ours if superseded.
+## Last Updated
 
-## Build
-
-Shell aliases (defined in `~/.zshrc`):
-- `zed-dev` — Quick iteration: `git checkout custom && cargo run --release`
-- `zed-bundle` — Install app bundle: `git checkout custom && ./script/bundle-mac -i`
-
-## Custom Features (on `custom` branch)
-
-1. **Multi-Tab Agent Panel** — Up to 9 concurrent agent threads in tabs. Tab bar auto-hides with single tab. `cmd+1`–`cmd+9` to switch, `ctrl+w` to close.
-
-2. **Transient Auto-Selection Context Chip** — Select code in editor, auto-attaches as context chip in Agent Thread. 150ms debounce. New selection replaces old; send clears transient.
-
-3. **Auto-Focus on Selection Toggle** — `ctrl+cmd+a` toggles whether selecting code auto-focuses the agent message input. Persists as `auto_focus_on_selection` agent setting.
-
-4. **Token Usage Display** — Inline `5% · 49k/1M` next to progress ring. Click toggles between compact (ring only) and detailed modes. Persists as `context_window_display` setting.
-
-5. **Context Window Fix** — Preserves model's actual context window (e.g. 1M for Opus 4.6) when ACP `UsageUpdate` reports a smaller value.
-
-6. **UsageUpdate Wiring** — Routes ACP `UsageUpdate` notifications to token usage UI.
-
-## Zed Configuration
-
-User-level config in `~/.config/zed/` (persists across builds):
-- `settings.json` — Theme, agent servers, dock positions, etc.
-- `keymap.json` — Custom keybindings
-
-Custom keybinding: `ctrl-cmd-c` → new thread with Claude agent (`claude-acp`).
+2026-04-03

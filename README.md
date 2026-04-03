@@ -1,3 +1,59 @@
+# Zed (Custom Fork)
+
+Personal fork of [Zed](https://github.com/zed-industries/zed) with Agent Thread UI enhancements.
+
+## Custom Features
+
+### Multi-Tab Agent Panel
+Multiple agent conversations in tabs. `cmd+1-9` to switch, `ctrl+w` to close. Max 9 tabs with idle eviction.
+
+### Token Usage Display
+Live token usage in the thread toolbar. Compact (progress ring) or detailed (percentage + counts) — click to toggle. Setting: `context_window_display`.
+
+### Transient Auto-Selection Context
+Code selections auto-appear as context chips in the agent message editor. `ctrl+cmd+a` to toggle. Setting: `auto_focus_on_selection`.
+
+## Branch Structure
+
+```
+main                              (upstream mirror — no custom commits)
+├── feat/transient-auto-selection (context chip + auto-focus + toggle)
+├── feat/token-usage-display      (usage wiring + inline labels + display toggle)
+└── feat/multi-tab-panel          (tabs + keyboard shortcuts)
+
+custom = main + all feat branches merged
+```
+
+Each feature lives on its own branch. This means:
+- **Conflicts are resolved per-feature** during upstream sync
+- **Features can be dropped** if upstream ships equivalent functionality
+- **New features** are added as new branches and merged into `custom`
+
+## Upstream Sync
+
+```bash
+git fetch upstream
+git checkout main && git pull upstream main
+
+# Rebase each feature onto updated main
+git checkout feat/transient-auto-selection && git rebase main
+git checkout feat/token-usage-display && git rebase main
+git checkout feat/multi-tab-panel && git rebase main
+
+# Rebuild custom from scratch
+git checkout custom && git reset --hard main
+git merge feat/transient-auto-selection --no-edit
+git merge feat/token-usage-display --no-edit
+git merge feat/multi-tab-panel --no-edit
+
+# Push
+git push --force-with-lease origin custom feat/transient-auto-selection feat/token-usage-display feat/multi-tab-panel
+```
+
+To drop a feature, simply omit its branch from the merge sequence and delete it.
+
+---
+
 # Zed
 
 [![Zed](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/zed-industries/zed/main/assets/badge/v0.json)](https://zed.dev)
