@@ -1139,6 +1139,11 @@
     //
     // Default: false
     "show_turn_stats": false,
+    // Whether to automatically focus the agent message editor when a code
+    // selection creates a transient context chip.
+    //
+    // Default: true
+    "auto_focus_on_selection": true,
   },
   // Whether the screen sharing icon is shown in the os status bar.
   "show_call_status_icon": true,

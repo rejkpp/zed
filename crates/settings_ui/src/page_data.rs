@@ -7470,6 +7470,28 @@ fn ai_page(cx: &App) -> SettingsPage {
                 metadata: None,
                 files: USER,
             }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Auto Focus on Selection",
+                description: "Whether to automatically focus the agent message editor when a code selection creates a transient context chip.",
+                field: Box::new(SettingField {
+                    json_path: Some("agent.auto_focus_on_selection"),
+                    pick: |settings_content| {
+                        settings_content
+                            .agent
+                            .as_ref()?
+                            .auto_focus_on_selection
+                            .as_ref()
+                    },
+                    write: |settings_content, value| {
+                        settings_content
+                            .agent
+                            .get_or_insert_default()
+                            .auto_focus_on_selection = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
         ]);
 
         items.into_boxed_slice()

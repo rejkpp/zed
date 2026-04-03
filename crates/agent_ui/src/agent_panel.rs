@@ -30,7 +30,7 @@ use crate::{
     AddContextServer, AgentDiffPane, ConversationView, CopyThreadToClipboard, CycleStartThreadIn,
     Follow, InlineAssistant, LoadThreadFromClipboard, NewThread, OpenActiveThreadAsMarkdown,
     OpenAgentDiff, OpenHistory, ResetTrialEndUpsell, ResetTrialUpsell, StartThreadIn,
-    ToggleNavigationMenu, ToggleNewThreadMenu, ToggleOptionsMenu,
+    ToggleAutoFocusOnSelection, ToggleNavigationMenu, ToggleNewThreadMenu, ToggleOptionsMenu,
     agent_configuration::{AgentConfiguration, AssistantConfigurationEvent},
     conversation_view::{AcpThreadViewEvent, ThreadView},
     ui::EndTrialUpsell,
@@ -4004,6 +4004,15 @@ impl Render for AgentPanel {
             .key_context(self.key_context())
             .on_action(cx.listener(|this, action: &NewThread, window, cx| {
                 this.new_thread(action, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleAutoFocusOnSelection, _window, cx| {
+                let current = AgentSettings::get_global(cx).auto_focus_on_selection;
+                update_settings_file(this.fs.clone(), cx, move |settings, _| {
+                    settings
+                        .agent
+                        .get_or_insert_default()
+                        .set_auto_focus_on_selection(!current);
+                });
             }))
             .on_action(cx.listener(|this, _: &OpenHistory, window, cx| {
                 this.open_history(window, cx);

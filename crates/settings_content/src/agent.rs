@@ -209,6 +209,11 @@ pub struct AgentSettingsContent {
     ///
     /// Default: false
     pub show_turn_stats: Option<bool>,
+    /// Whether to automatically focus the agent message editor when a code selection
+    /// creates a transient context chip.
+    ///
+    /// Default: true
+    pub auto_focus_on_selection: Option<bool>,
     /// Per-tool permission rules for granular control over which tool actions
     /// require confirmation.
     ///
@@ -254,6 +259,10 @@ impl AgentSettingsContent {
 
     pub fn set_new_thread_location(&mut self, value: NewThreadLocation) {
         self.new_thread_location = Some(value);
+    }
+
+    pub fn set_auto_focus_on_selection(&mut self, value: bool) {
+        self.auto_focus_on_selection = Some(value);
     }
 
     pub fn add_favorite_model(&mut self, model: LanguageModelSelection) {

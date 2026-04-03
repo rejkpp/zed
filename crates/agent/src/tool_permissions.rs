@@ -595,6 +595,7 @@ mod tests {
             message_editor_min_lines: 1,
             tool_permissions,
             show_turn_stats: false,
+            auto_focus_on_selection: true,
             new_thread_location: Default::default(),
             sidebar_side: Default::default(),
             thinking_display: Default::default(),
